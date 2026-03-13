@@ -2277,9 +2277,17 @@ function playBeep() {
 function switchTab(tab) {
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  document.getElementById(`view-${tab}`).classList.add('active');
+  document.getElementById('view-' + tab).classList.add('active');
   event.target.classList.add('active');
-  
+
+  // Hide scan FAB on shortlist & guide tabs (it overlaps buttons)
+  const scanBtn = document.getElementById('scanBtn');
+  if (tab === 'shortlist' || tab === 'guide' || tab === 'settings') {
+    scanBtn.style.display = 'none';
+  } else {
+    scanBtn.style.display = 'flex';
+  }
+
   if (tab === 'portfolio') renderPortfolio();
   if (tab === 'watchlist') renderWatchlist();
   // shortlist renders on demand via button
@@ -2452,6 +2460,18 @@ if (savedKey) {
 renderQuickAdd();
 renderWatchlist();
 setupAutoScan();
+
+// Attach analyze button via addEventListener (belt & suspenders)
+document.addEventListener('DOMContentLoaded', function() {
+  const analyzeBtn = document.getElementById('slAnalyzeBtn');
+  if (analyzeBtn) {
+    analyzeBtn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      runShortlistAnalysis();
+    });
+    console.log('[Init] Analyze button listener attached');
+  }
+});
 
 // Auto-run first scan after load (safe)
 setTimeout(() => { try { runScan(); } catch(e) { console.warn('Auto-scan error:', e); } }, 1200);
