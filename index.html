@@ -1735,26 +1735,43 @@ async function avCall(params) {
 
 // Récupère les 60 dernières séances journalières (OHLCV)
 async function avDailyPrices(ticker) {
-  const cacheKey = `daily_${ticker}_${new Date().toDateString()}`;
+  const cacheKey = 'daily_' + ticker + '_' + new Date().toDateString();
   if (avCache[cacheKey]) return avCache[cacheKey];
 
-  const avTicker = toAVTicker(ticker);
-  const data = await avCall({ function: 'TIME_SERIES_DAILY', symbol: avTicker, outputsize: 'compact' });
+  // Essaie d'abord le ticker Yahoo Finance tel quel, puis la conversion AV
+  const tickersToTry = [ticker];
+  const avConverted = toAVTicker(ticker);
+  if (avConverted !== ticker) tickersToTry.push(avConverted);
 
-  const series = data['Time Series (Daily)'];
-  if (!series) throw new Error(`Pas de données pour ${ticker}`);
+  let series = null;
+  let lastError = null;
+
+  for (const sym of tickersToTry) {
+    try {
+      const data = await avCall({ function: 'TIME_SERIES_DAILY', symbol: sym, outputsize: 'compact' });
+      series = data['Time Series (Daily)'];
+      if (series) { console.log('[AV] Prix OK avec symbole:', sym); break; }
+    } catch(e) {
+      lastError = e;
+      console.warn('[AV] Echec avec', sym, ':', e.message);
+    }
+  }
+
+  if (!series) throw new Error('Données indisponibles pour ' + ticker + ' (essayé: ' + tickersToTry.join(', ') + ')');
 
   const closes = Object.entries(series)
     .slice(0, 60)
-    .sort((a, b) => new Date(a[0]) - new Date(b[0]))
-    .map(([date, v]) => ({
-      date,
-      open:   parseFloat(v['1. open']),
-      high:   parseFloat(v['2. high']),
-      low:    parseFloat(v['3. low']),
-      close:  parseFloat(v['4. close']),
-      volume: parseInt(v['5. volume']),
-    }));
+    .sort(function(a, b) { return new Date(a[0]) - new Date(b[0]); })
+    .map(function([date, v]) {
+      return {
+        date,
+        open:   parseFloat(v['1. open']),
+        high:   parseFloat(v['2. high']),
+        low:    parseFloat(v['3. low']),
+        close:  parseFloat(v['4. close']),
+        volume: parseInt(v['5. volume']),
+      };
+    });
 
   avCache[cacheKey] = closes;
   return closes;
@@ -1762,19 +1779,34 @@ async function avDailyPrices(ticker) {
 
 // Récupère le cours en temps réel (quote)
 async function avQuote(ticker) {
-  const cacheKey = `quote_${ticker}_${Math.floor(Date.now() / 60000)}`; // cache 1 min
+  const cacheKey = 'quote_' + ticker + '_' + Math.floor(Date.now() / 60000);
   if (avCache[cacheKey]) return avCache[cacheKey];
 
-  const avTicker = toAVTicker(ticker);
-  const data = await avCall({ function: 'GLOBAL_QUOTE', symbol: avTicker });
+  const tickersToTry = [ticker];
+  const avConverted = toAVTicker(ticker);
+  if (avConverted !== ticker) tickersToTry.push(avConverted);
 
-  const q = data['Global Quote'];
-  if (!q || !q['05. price']) throw new Error(`Quote indisponible pour ${ticker}`);
+  let q = null;
+  for (const sym of tickersToTry) {
+    try {
+      const data = await avCall({ function: 'GLOBAL_QUOTE', symbol: sym });
+      q = data['Global Quote'];
+      if (q && q['05. price'] && parseFloat(q['05. price']) > 0) {
+        console.log('[AV] Quote OK avec symbole:', sym, '→', q['05. price']);
+        break;
+      }
+      q = null;
+    } catch(e) {
+      console.warn('[AV] Quote echec avec', sym, ':', e.message);
+    }
+  }
+
+  if (!q || !q['05. price']) throw new Error('Quote indisponible pour ' + ticker);
 
   const result = {
     price:     parseFloat(q['05. price']),
     change:    parseFloat(q['09. change']),
-    changePct: parseFloat(q['10. change percent']),
+    changePct: parseFloat(q['10. change percent'].replace('%','')),
     volume:    parseInt(q['06. volume']),
     high:      parseFloat(q['03. high']),
     low:       parseFloat(q['04. low']),
@@ -2099,7 +2131,7 @@ function renderSignalCard(ticker, ind, signals) {
     <div class="card-top">
       <div>
         <div class="ticker">${ticker} ${isEntry && sigCount >= 2 ? '<span style="font-size:10px;background:var(--accent);color:#000;border-radius:4px;padding:1px 6px;font-weight:700;vertical-align:middle;margin-left:4px">' + sigCount + '/4</span>' : ''}</div>
-        <div class="company-name">${stock.name}</div>
+        <div class="company-name">${stock.name} ${ind.source === 'live' ? '<span style="font-size:9px;color:var(--accent);font-family:var(--mono)">● LIVE</span>' : '<span style="font-size:9px;color:var(--accent3);font-family:var(--mono)">◌ SIM</span>'}</div>
       </div>
       <div class="price-block">
         <div class="price">${stock.price.toFixed(2)}</div>
@@ -2137,7 +2169,7 @@ function renderPortfolioCard(pos) {
     <div class="pf-top">
       <div>
         <div class="pf-ticker">${pos.ticker}</div>
-        <div class="company-name">${stock.name}</div>
+        <div class="company-name">${stock.name} ${ind.source === 'live' ? '<span style="font-size:9px;color:var(--accent);font-family:var(--mono)">● LIVE</span>' : '<span style="font-size:9px;color:var(--accent3);font-family:var(--mono)">◌ SIM</span>'}</div>
       </div>
       <div>
         <div class="pf-pnl ${isPosGain ? 'pos' : 'neg'}">${isPosGain ? '+' : ''}${pnl.toFixed(0)}€</div>
@@ -2319,7 +2351,7 @@ function renderWatchlist() {
     return `<div class="signal-card" style="display:flex; align-items:center; justify-content:space-between; padding:12px 14px">
       <div>
         <div class="ticker" style="font-size:13px">${t}</div>
-        <div class="company-name">${stock.name}</div>
+        <div class="company-name">${stock.name} ${ind.source === 'live' ? '<span style="font-size:9px;color:var(--accent);font-family:var(--mono)">● LIVE</span>' : '<span style="font-size:9px;color:var(--accent3);font-family:var(--mono)">◌ SIM</span>'}</div>
       </div>
       <div style="display:flex; align-items:center; gap:12px">
         <div style="text-align:right">
