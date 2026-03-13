@@ -282,6 +282,24 @@
   .ind-chip.bullish { color: var(--accent); border-color: rgba(0,229,160,0.2); background: rgba(0,229,160,0.06); }
   .ind-chip.bearish { color: var(--accent2); border-color: rgba(255,77,109,0.2); background: rgba(255,77,109,0.06); }
   .ind-chip.neutral { color: var(--accent3); border-color: rgba(251,191,36,0.2); background: rgba(251,191,36,0.06); }
+  /* MA cross chips — plus visible, légèrement plus grand */
+  .ind-chip.cross-bull {
+    color: #fff; background: var(--accent); border-color: var(--accent);
+    font-weight: 700; box-shadow: 0 0 8px rgba(0,229,160,0.35);
+    animation: chipPulse 1.8s ease infinite;
+  }
+  .ind-chip.cross-bear {
+    color: #fff; background: var(--accent2); border-color: var(--accent2);
+    font-weight: 700; box-shadow: 0 0 8px rgba(255,77,109,0.35);
+    animation: chipPulse 1.8s ease infinite;
+  }
+  /* Distance chips — couleur douce selon positif/negatif */
+  .ind-chip.neutral-pos { color: rgba(0,229,160,0.7); border-color: rgba(0,229,160,0.12); background: rgba(0,229,160,0.04); }
+  .ind-chip.neutral-neg { color: rgba(255,77,109,0.7); border-color: rgba(255,77,109,0.12); background: rgba(255,77,109,0.04); }
+  @keyframes chipPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.7; }
+  }
 
   /* SIGNAL BAR */
   .signal-bar-wrap {
@@ -1058,7 +1076,7 @@
   </div>
 
   <div class="section-header">
-    <span class="section-title">Signaux d'entrée</span>
+    <span class="section-title">Signaux d'entrée (≥2 indicateurs)</span>
     <span class="badge badge-green" id="entryBadge">0 détectés</span>
   </div>
   <div id="entrySignals">
@@ -1066,7 +1084,7 @@
   </div>
 
   <div class="section-header" style="margin-top:20px">
-    <span class="section-title">À surveiller</span>
+    <span class="section-title">À surveiller (1 indicateur)</span>
     <span class="badge badge-yellow" id="watchBadge">0 proches</span>
   </div>
   <div id="watchSignals"></div>
@@ -1151,6 +1169,13 @@
 
   <div class="settings-group">
     <div class="settings-group-title">📈 Signaux d'entrée</div>
+    <div class="settings-row">
+      <div>
+        <div class="settings-label">Confirmations requises</div>
+        <div class="settings-desc">Indicateurs min pour "Entrée"</div>
+      </div>
+      <input class="settings-input" id="minEntrySignals" type="number" value="2" min="1" max="4">
+    </div>
     <div class="settings-row">
       <div>
         <div class="settings-label">RSI survendu</div>
@@ -1350,7 +1375,7 @@
     <div class="guide-step-num">2</div>
     <div class="guide-step-body">
       <div class="guide-step-title">Chaque matin (9h30–10h) — Scanner</div>
-      <div class="guide-step-text">Onglet <span class="guide-tag green">🔍 Scanner</span> → bouton <strong>⚡ SCANNER</strong>. Attends la fin de l'analyse (12–15 req Alpha Vantage). Les signaux d'entrée confirmés apparaissent en vert. <em>Tu n'agis que s'il y a un signal — pas d'obligation de trader tous les jours.</em></div>
+      <div class="guide-step-text">Onglet <span class="guide-tag green">🔍 Scanner</span> → bouton <strong>⚡ SCANNER</strong>. Attends la fin de l'analyse (12–15 req Alpha Vantage). Les signaux d'entrée confirmés (≥ 2 indicateurs) apparaissent en vert. Les titres avec 1 seul indicateur sont classés en "À surveiller". <em>Tu n'agis que s'il y a un signal — pas d'obligation de trader tous les jours.</em></div>
     </div>
   </div>
 
@@ -1623,12 +1648,26 @@ function mockIndicators(ticker) {
   const bHigh = MOCK_STOCKS[ticker]?.price * rng(1.00, 1.12, 23) || 100;
   const currentPrice = MOCK_STOCKS[ticker]?.price || 100;
   
+  // Simulate cross: triggered ~15% of the time per MA
+  const crossMa20 = ((seed * 3 + 7) % 10 < 1) ? 'bullish'
+                  : ((seed * 3 + 7) % 10 < 2) ? 'bearish' : null;
+  const crossMa50 = ((seed * 5 + 11) % 10 < 1) ? 'bullish'
+                  : ((seed * 5 + 11) % 10 < 2) ? 'bearish' : null;
+  const distMa20 = parseFloat(((currentPrice - ma20) / ma20 * 100).toFixed(2));
+  const distMa50 = parseFloat(((currentPrice - ma50) / ma50 * 100).toFixed(2));
+
   return {
     rsi,
     macd: parseFloat(macd.toFixed(3)),
     macdSignal: parseFloat(macdSignal.toFixed(3)),
     ma20: parseFloat(ma20.toFixed(2)),
     ma50: parseFloat(ma50.toFixed(2)),
+    prevMa20: parseFloat((ma20 * rng(0.99, 1.01, 41)).toFixed(2)),
+    prevMa50: parseFloat((ma50 * rng(0.99, 1.01, 43)).toFixed(2)),
+    crossMa20,
+    crossMa50,
+    distMa20,
+    distMa50,
     bollingerLow: parseFloat(bLow.toFixed(2)),
     bollingerHigh: parseFloat(bHigh.toFixed(2)),
     price: currentPrice,
@@ -1811,10 +1850,29 @@ function computeIndicators(candles, quote) {
   const ma50   = calcSMA(closes, 50);
   const { macd, signal } = calcMACD(closes);
   const bb     = calcBollinger(closes);
-  const lastCandle = candles[candles.length - 1];
+
+  // Previous session MAs (on closes minus last point) for cross detection
+  const prevCloses = closes.slice(0, -1);
+  const prevMa20 = calcSMA(prevCloses, 20);
+  const prevMa50 = calcSMA(prevCloses, 50);
+  const prevPrice = closes[closes.length - 2] || closes[closes.length - 1];
+  const curPrice  = quote.price;
+
+  // Cross detection : price crossed MA in last session
+  // bullish = price went from below to above ; bearish = above to below
+  const crossMa20 = prevPrice < prevMa20 && curPrice >= ma20 ? 'bullish'
+                  : prevPrice > prevMa20 && curPrice <= ma20 ? 'bearish'
+                  : null;
+  const crossMa50 = prevPrice < prevMa50 && curPrice >= ma50 ? 'bullish'
+                  : prevPrice > prevMa50 && curPrice <= ma50 ? 'bearish'
+                  : null;
+
+  // Distance price vs MAs (%)
+  const distMa20 = parseFloat(((curPrice - ma20) / ma20 * 100).toFixed(2));
+  const distMa50 = parseFloat(((curPrice - ma50) / ma50 * 100).toFixed(2));
 
   return {
-    price:         quote.price,
+    price:         curPrice,
     change:        quote.changePct,
     volume:        quote.volume,
     rsi,
@@ -1822,12 +1880,18 @@ function computeIndicators(candles, quote) {
     macdSignal:    signal,
     ma20:          parseFloat(ma20.toFixed(4)),
     ma50:          parseFloat(ma50.toFixed(4)),
+    prevMa20:      parseFloat(prevMa20.toFixed(4)),
+    prevMa50:      parseFloat(prevMa50.toFixed(4)),
+    crossMa20,     // 'bullish' | 'bearish' | null
+    crossMa50,     // 'bullish' | 'bearish' | null
+    distMa20,      // % écart prix/MA20
+    distMa50,      // % écart prix/MA50
     bollingerLow:  bb.lower,
     bollingerHigh: bb.upper,
     bollingerMid:  bb.mid,
     high:          quote.high,
     low:           quote.low,
-    candles,       // pour le mini-chart réel
+    candles,
   };
 }
 
@@ -1878,29 +1942,41 @@ function getSettings() {
 
 function detectSignals(ticker, ind) {
   const s = getSettings();
-  const signals = [];
-  
-  // ENTRY signals
-  if (ind.rsi < s.rsiOversold)
-    signals.push({ type: 'entry', key: 'RSI', label: `RSI survendu (${ind.rsi})`, strength: 'strong' });
-  
-  if (s.maCross && ind.ma20 > ind.ma50 && ind.ma20 < ind.ma50 * 1.02)
-    signals.push({ type: 'entry', key: 'MA', label: 'Croisement MA20/MA50 haussier', strength: 'medium' });
-  
-  if (s.macdSignal && ind.macd > ind.macdSignal && ind.macd < 0.1)
-    signals.push({ type: 'entry', key: 'MACD', label: 'MACD croisement haussier', strength: 'medium' });
-  
-  if (s.bollingerLow && ind.price < ind.bollingerLow * 1.01)
-    signals.push({ type: 'entry', key: 'BB', label: 'Rebond bande Bollinger basse', strength: 'strong' });
-  
-  // WATCH signals (approaching entry)
-  if (ind.rsi >= s.rsiOversold && ind.rsi < s.rsiOversold + 8)
-    signals.push({ type: 'watch', key: 'RSI_W', label: `RSI proche de survendu (${ind.rsi})`, strength: 'watch' });
-  
-  if (s.bollingerLow && ind.price < ind.bollingerLow * 1.04 && ind.price >= ind.bollingerLow)
-    signals.push({ type: 'watch', key: 'BB_W', label: 'Prix approche BB basse', strength: 'watch' });
+  const candidates = []; // indicateurs d'entrée satisfaits
 
-  return signals;
+  // ── Indicateurs d'entrée ───────────────────────────────────────────────
+  if (ind.rsi < s.rsiOversold)
+    candidates.push({ key: 'RSI', label: 'RSI survendu (' + ind.rsi + ')', strength: 'strong' });
+
+  if (s.maCross && ind.ma20 > ind.ma50 && ind.ma20 < ind.ma50 * 1.02)
+    candidates.push({ key: 'MA', label: 'Croisement MA20/MA50 haussier', strength: 'medium' });
+
+  if (s.macdSignal && ind.macd > ind.macdSignal && ind.macd < 0.1)
+    candidates.push({ key: 'MACD', label: 'MACD croisement haussier', strength: 'medium' });
+
+  if (s.bollingerLow && ind.price < ind.bollingerLow * 1.01)
+    candidates.push({ key: 'BB', label: 'Rebond Bollinger basse', strength: 'strong' });
+
+  // Croisement cours/MA20 haussier
+  if (ind.crossMa20 === 'bullish')
+    candidates.push({ key: 'CROSS_MA20', label: 'Cours croise MA20 ↑', strength: 'strong' });
+
+  // Croisement cours/MA50 haussier
+  if (ind.crossMa50 === 'bullish')
+    candidates.push({ key: 'CROSS_MA50', label: 'Cours croise MA50 ↑', strength: 'strong' });
+
+  // ── Classification selon nombre de critères ───────────────────────────
+  // ≥ 2 critères → Signal d'entrée confirmé
+  // == 1 critère → À surveiller
+  // == 0         → rien
+  const minEntry = parseInt(document.getElementById('minEntrySignals')?.value) || 2;
+
+  if (candidates.length >= minEntry) {
+    return candidates.map(c => ({ ...c, type: 'entry' }));
+  } else if (candidates.length === 1) {
+    return candidates.map(c => ({ ...c, type: 'watch' }));
+  }
+  return [];
 }
 
 function detectExitSignals(ticker, ind, position) {
@@ -1978,15 +2054,37 @@ function renderSignalCard(ticker, ind, signals) {
   const isEntry = signals.some(s => s.type === 'entry');
   const isWatch = !isEntry && signals.some(s => s.type === 'watch');
   const cls = isEntry ? 'entry' : 'watch';
+  const sigCount = signals.filter(s => s.type === 'entry').length;
   const isUp = (stock.change || 0) >= 0;
   const seed = ticker.charCodeAt(0) * 7 + (ticker.charCodeAt(2) || 1) * 3;
   
+  // MA cross chips
+  const ma20CrossChip = ind.crossMa20
+    ? '<span class="ind-chip ' + (ind.crossMa20 === 'bullish' ? 'cross-bull' : 'cross-bear') + '">'
+      + (ind.crossMa20 === 'bullish' ? '▲' : '▼') + ' Cours×MA20</span>'
+    : '';
+  const ma50CrossChip = ind.crossMa50
+    ? '<span class="ind-chip ' + (ind.crossMa50 === 'bullish' ? 'cross-bull' : 'cross-bear') + '">'
+      + (ind.crossMa50 === 'bullish' ? '▲' : '▼') + ' Cours×MA50</span>'
+    : '';
+
+  // Distance chips (only if not crossing — less noise)
+  const distMa20Chip = !ind.crossMa20
+    ? '<span class="ind-chip ' + (ind.distMa20 >= 0 ? 'neutral-pos' : 'neutral-neg') + '">'
+      + 'MA20 ' + (ind.distMa20 >= 0 ? '+' : '') + ind.distMa20 + '%</span>'
+    : '';
+  const distMa50Chip = !ind.crossMa50
+    ? '<span class="ind-chip ' + (ind.distMa50 >= 0 ? 'neutral-pos' : 'neutral-neg') + '">'
+      + 'MA50 ' + (ind.distMa50 >= 0 ? '+' : '') + ind.distMa50 + '%</span>'
+    : '';
+
   const chips = [
-    `<span class="ind-chip ${ind.rsi < 30 ? 'bullish' : ind.rsi > 70 ? 'bearish' : 'neutral'}">RSI ${ind.rsi}</span>`,
-    `<span class="ind-chip ${ind.macd > ind.macdSignal ? 'bullish' : 'bearish'}">MACD ${ind.macd > ind.macdSignal ? '↑' : '↓'}</span>`,
-    `<span class="ind-chip ${ind.ma20 > ind.ma50 ? 'bullish' : 'bearish'}">MA ${ind.ma20 > ind.ma50 ? '↑' : '↓'}</span>`,
-    `<span class="ind-chip neutral">Vol ${(ind.volume/1e6).toFixed(1)}M</span>`
-  ].join('');
+    '<span class="ind-chip ' + (ind.rsi < 30 ? 'bullish' : ind.rsi > 70 ? 'bearish' : 'neutral') + '">RSI ' + ind.rsi + '</span>',
+    '<span class="ind-chip ' + (ind.macd > ind.macdSignal ? 'bullish' : 'bearish') + '">MACD ' + (ind.macd > ind.macdSignal ? '↑' : '↓') + '</span>',
+    ma20CrossChip || distMa20Chip,
+    ma50CrossChip || distMa50Chip,
+    '<span class="ind-chip neutral">Vol ' + (ind.volume/1e6).toFixed(1) + 'M</span>',
+  ].filter(Boolean).join('');
   
   const sigLabels = signals.map(s =>
     `<div class="alert-zone ${s.type === 'entry' ? 'safe' : 'warning'}">
@@ -1997,7 +2095,7 @@ function renderSignalCard(ticker, ind, signals) {
   return `<div class="signal-card ${cls}" onclick="showDetail('${ticker}')">
     <div class="card-top">
       <div>
-        <div class="ticker">${ticker}</div>
+        <div class="ticker">${ticker} ${isEntry && sigCount >= 2 ? '<span style="font-size:10px;background:var(--accent);color:#000;border-radius:4px;padding:1px 6px;font-weight:700;vertical-align:middle;margin-left:4px">' + sigCount + '/4</span>' : ''}</div>
         <div class="company-name">${stock.name}</div>
       </div>
       <div class="price-block">
@@ -2105,6 +2203,8 @@ async function runScan() {
     const entrySignals = signals.filter(s => s.type === 'entry');
     const watchSignals  = signals.filter(s => s.type === 'watch');
 
+    // entrySignals.length >= minEntry (set in detectSignals)
+    // watchSignals.length == 1 exactly
     if (entrySignals.length > 0) entryResults.push({ ticker, ind, signals: entrySignals });
     else if (watchSignals.length > 0) watchResults.push({ ticker, ind, signals: watchSignals });
   }
@@ -2350,8 +2450,8 @@ renderQuickAdd();
 renderWatchlist();
 setupAutoScan();
 
-// Auto-run first scan after load
-setTimeout(() => runScan(), 800);
+// Auto-run first scan after load (safe)
+setTimeout(() => { try { runScan(); } catch(e) { console.warn('Auto-scan error:', e); } }, 1200);
 
 // ============================================================
 // SHORTLIST MODULE — Pool européen + scoring composite
@@ -2473,6 +2573,7 @@ let shortlistSelected = new Set();
 let shortlistRanked = [];
 
 async function runShortlistAnalysis() {
+  console.log('[Shortlist] Analysis started');
   const btn = document.getElementById('slAnalyzeBtn');
   const icon = document.getElementById('slBtnIcon');
   const text = document.getElementById('slBtnText');
@@ -2489,10 +2590,11 @@ async function runShortlistAnalysis() {
     progressEl = document.createElement('div');
     progressEl.id = 'slProgress';
     progressEl.className = 'sl-progress show';
-    progressEl.innerHTML = `
-      <div class="sl-progress-text" id="slProgressText">Initialisation…</div>
-      <div class="sl-progress-bar"><div class="sl-progress-fill" id="slProgressFill"></div></div>`;
-    document.getElementById('shortlistResults').before(progressEl);
+    progressEl.innerHTML = '<div class="sl-progress-text" id="slProgressText">Initialisation…</div><div class="sl-progress-bar"><div class="sl-progress-fill" id="slProgressFill"></div></div>';
+    const resultsEl = document.getElementById('shortlistResults');
+    if (resultsEl && resultsEl.parentNode) {
+      resultsEl.parentNode.insertBefore(progressEl, resultsEl);
+    }
   }
   progressEl.classList.add('show');
 
@@ -2553,68 +2655,83 @@ async function runShortlistAnalysis() {
   icon.textContent = '⚡';
   text.textContent = 'RELANCER';
 
-  showToast(`${shortlistRanked.length} candidats classés — pool de ${pool.length} titres`);
+  showToast(shortlistRanked.length + ' candidats classés — pool de ' + pool.length + ' titres');
+  console.log('[Shortlist] Done:', shortlistRanked.length, 'results');
 }
 
 function renderShortlist(ranked) {
   const cont = document.getElementById('shortlistResults');
   if (!ranked.length) {
-    cont.innerHTML = '<div class="empty-state"><div class="icon">🔍</div>Aucun titre ne correspond aux filtres</div>';
+    cont.innerHTML = '<div class="empty-state"><div class="icon">&#128269;</div>Aucun titre ne correspond aux filtres</div>';
     return;
   }
 
-  cont.innerHTML = ranked.map((item, idx) => {
+  const segColors = { rsi:'#00e5a0', bollinger:'#818cf8', macd:'#fbbf24', momentum:'#f472b6', atr:'#38bdf8' };
+
+  cont.innerHTML = '';
+  ranked.forEach(function(item, idx) {
     const rank = idx + 1;
     const rankClass = rank === 1 ? 'gold' : rank === 2 ? 'silver' : rank === 3 ? 'bronze' : 'other';
-    const rankEmoji = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : rank;
+    const rankEmoji = rank === 1 ? '&#129351;' : rank === 2 ? '&#129352;' : rank === 3 ? '&#129353;' : String(rank);
     const isTop3 = rank <= 3;
     const isChecked = shortlistSelected.has(item.ticker);
-    const { components } = item;
     const total = item.score;
+    const scoreColor = total >= 70 ? 'var(--accent)' : total >= 50 ? 'var(--accent3)' : 'var(--text2)';
+    const macdArrow = item.ind.macd > item.ind.macdSignal ? '&#8593;' : '&#8595;';
+    const maArrow = item.ind.ma20 > item.ind.ma50 ? '&#8593;' : '&#8595;';
+    const srcLabel = item.ind.source === 'live' ? '&#127824; live' : '&#127825; sim';
 
-    // Score bar segments (proportional to their contribution)
-    const segColors = { rsi:'#00e5a0', bollinger:'#818cf8', macd:'#fbbf24', momentum:'#f472b6', atr:'#38bdf8' };
-    const segs = Object.entries(components).map(([key, val]) => {
-      const w = (val / 100 * 100).toFixed(1);
-      return `<div class="score-seg" style="width:${w}%;background:${segColors[key]};min-width:${val>0?2:0}px"></div>`;
-    }).join('');
+    // Score bar segments
+    let segs = '';
+    Object.entries(item.components).forEach(function(entry) {
+      const key = entry[0], val = entry[1];
+      const w = (val).toFixed(1);
+      const minW = val > 0 ? 2 : 0;
+      segs += '<div class="score-seg" style="width:' + w + '%;background:' + segColors[key] + ';min-width:' + minW + 'px"></div>';
+    });
 
     // Signal tags
-    const tags = item.triggers.map(t => {
-      const colors = { rsi:'#00e5a0', bollinger:'#818cf8', macd:'#fbbf24', momentum:'#f472b6' };
-      const c = colors[t.key] || '#94a3b8';
-      return `<span class="sig-tag" style="background:${c}18;color:${c};border:1px solid ${c}40">${t.label}</span>`;
-    }).join('');
+    let tags = '';
+    const tagColors = { rsi:'#00e5a0', bollinger:'#818cf8', macd:'#fbbf24', momentum:'#f472b6' };
+    item.triggers.forEach(function(t) {
+      const c = tagColors[t.key] || '#94a3b8';
+      tags += '<span class="sig-tag" style="background:' + c + '18;color:' + c + ';border:1px solid ' + c + '40">' + t.label + '</span>';
+    });
 
-    const scoreColor = total >= 70 ? 'var(--accent)' : total >= 50 ? 'var(--accent3)' : 'var(--text2)';
+    const card = document.createElement('div');
+    card.className = 'rank-card' + (isTop3 ? ' top3' : '');
+    card.id = 'rc_' + item.ticker;
+    card.innerHTML =
+      '<div class="rank-row">' +
+        '<div class="rank-num ' + rankClass + '">' + rankEmoji + '</div>' +
+        '<div class="rank-info">' +
+          '<div class="rank-ticker">' + item.ticker + '</div>' +
+          '<div class="rank-meta">' + item.name + ' &middot; ' + item.market + ' &middot; ' + item.sector + '</div>' +
+        '</div>' +
+        '<div class="rank-score-block">' +
+          '<div class="rank-score" style="color:' + scoreColor + '">' + total + '</div>' +
+          '<div class="rank-score-label">/ 100</div>' +
+        '</div>' +
+        '<div class="rank-check ' + (isChecked ? 'checked' : '') + '" id="chk_' + item.ticker + '">' + (isChecked ? '&#10003;' : '') + '</div>' +
+      '</div>' +
+      '<div class="score-breakdown">' + segs + '</div>' +
+      (tags ? '<div class="sig-tags">' + tags + '</div>' : '') +
+      '<div class="rank-footer">' +
+        '<div class="rank-stats">' +
+          '<div class="rank-stat">RSI <span>' + item.ind.rsi + '</span></div>' +
+          '<div class="rank-stat">ATR <span>' + item.ind.atrPct + '%</span></div>' +
+          '<div class="rank-stat">MACD <span>' + macdArrow + '</span></div>' +
+          '<div class="rank-stat">MA <span>' + maArrow + '</span></div>' +
+        '</div>' +
+        '<div style="font-family:var(--mono);font-size:10px;color:var(--text3)">' + srcLabel + '</div>' +
+      '</div>';
 
-    return `<div class="rank-card ${isTop3 ? 'top3' : ''}" id="rc_${item.ticker}">
-      <div class="rank-row">
-        <div class="rank-num ${rankClass}">${rankEmoji}</div>
-        <div class="rank-info">
-          <div class="rank-ticker">${item.ticker}</div>
-          <div class="rank-meta">${item.name} · ${item.market} · ${item.sector}</div>
-        </div>
-        <div class="rank-score-block">
-          <div class="rank-score" style="color:${scoreColor}">${total}</div>
-          <div class="rank-score-label">/ 100</div>
-        </div>
-        <div class="rank-check ${isChecked ? 'checked' : ''}" id="chk_${item.ticker}"
-          onclick="toggleShortlistItem('${item.ticker}')">${isChecked ? '✓' : ''}</div>
-      </div>
-      <div class="score-breakdown">${segs}</div>
-      ${tags ? '<div class="sig-tags">' + tags + '</div>' : ''}
-      <div class="rank-footer">
-        <div class="rank-stats">
-          <div class="rank-stat">RSI <span>${item.ind.rsi}</span></div>
-          <div class="rank-stat">ATR <span>${item.ind.atrPct}%</span></div>
-          <div class="rank-stat">MACD <span>${item.ind.macd > item.ind.macdSignal ? '↑' : '↓'}</span></div>
-          <div class="rank-stat">MA <span>${item.ind.ma20 > item.ind.ma50 ? '↑' : '↓'}</span></div>
-        </div>
-        <div style="font-family:var(--mono);font-size:10px;color:var(--text3)">${item.ind.source === 'live' ? '🟢 live' : '🟡 sim'}</div>
-      </div>
-    </div>`;
-  }).join('');
+    // Attach click handler properly (no inline onclick with quotes)
+    const chk = card.querySelector('.rank-check');
+    chk.addEventListener('click', function() { toggleShortlistItem(item.ticker); });
+
+    cont.appendChild(card);
+  });
 }
 
 function toggleShortlistItem(ticker) {
@@ -2652,6 +2769,7 @@ function applyShortlistToWatchlist() {
 
 function toggleFilter(btn, type) {
   btn.classList.toggle('active');
+  console.log('[Filter]', type, btn.dataset.market || btn.dataset.sector, btn.classList.contains('active'));
 }
 
 </script>
