@@ -1336,6 +1336,9 @@
     <div class="empty-state"><div class="icon">🏆</div>Lancez l'analyse pour classer les meilleurs candidats</div>
   </div>
 
+  <!-- DEBUG PANEL - visible errors in-page -->
+  <div id="debugPanel" style="display:none; background:rgba(255,77,109,0.08); border:1px solid rgba(255,77,109,0.3); border-radius:10px; padding:12px; margin-bottom:12px; font-family:var(--mono); font-size:11px; color:var(--accent2); line-height:1.6" id="slDebug"></div>
+
   <div style="margin-top:16px; display:flex; gap:10px">
     <button id="slAnalyzeBtn" onclick="runShortlistAnalysis()" style="flex:2; background:var(--accent); color:#000; border:none; border-radius:10px; padding:14px; font-family:var(--mono); font-size:13px; font-weight:700; cursor:pointer; letter-spacing:0.5px; display:flex; align-items:center; justify-content:center; gap:8px">
       <span id="slBtnIcon">⚡</span> <span id="slBtnText">ANALYSER LE POOL</span>
@@ -2606,6 +2609,14 @@ async function runShortlistAnalysis() {
 
     const pool = EURO_POOL.filter(function(s){ return activeMarkets.includes(s.market) && activeSectors.includes(s.sector); });
     console.log('[Shortlist] pool size:', pool.length);
+    const dbgEl = document.getElementById('slDebug');
+    if (dbgEl) {
+      dbgEl.style.display = 'block';
+      dbgEl.innerHTML = '&#128270; Marchés actifs: [' + activeMarkets.join(',') + ']<br>'
+        + '&#128270; Secteurs actifs: [' + activeSectors.join(',') + ']<br>'
+        + '&#128270; Pool: ' + pool.length + ' titres<br>'
+        + '&#128270; RSI max: ' + rsiMax + ' | Top: ' + topN;
+    }
 
     if (pool.length === 0) {
       document.getElementById('shortlistResults').innerHTML = '<div class="empty-state"><div class="icon">&#9888;</div>Aucun marché ou secteur sélectionné — activez au moins un filtre</div>';
@@ -2659,10 +2670,17 @@ async function runShortlistAnalysis() {
 
     document.getElementById('slBadge').textContent = shortlistRanked.length + ' / ' + pool.length + ' analysés';
     showToast(shortlistRanked.length + ' candidats classés');
+    const dbgOk = document.getElementById('slDebug');
+    if (dbgOk) { dbgOk.style.display = 'none'; dbgOk.innerHTML = ''; }
     console.log('[Shortlist] Done:', shortlistRanked.length, 'results');
 
   } catch(err) {
     console.error('[Shortlist] ERROR:', err);
+    const dbg = document.getElementById('slDebug');
+    if (dbg) {
+      dbg.style.display = 'block';
+      dbg.innerHTML = '&#9888; ERREUR: ' + err.message + '<br>' + (err.stack || '').replace(/\n/g,'<br>').slice(0,400);
+    }
     document.getElementById('shortlistResults').innerHTML = '<div class="empty-state" style="color:var(--accent2)"><div class="icon">&#9888;</div>Erreur: ' + err.message + '</div>';
   } finally {
     btn.style.opacity = '1';
@@ -2791,4 +2809,3 @@ function toggleFilter(btn, type) {
 </script>
 </body>
 </html>
- 
