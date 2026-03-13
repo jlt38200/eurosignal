@@ -578,27 +578,7 @@
   .btn-add:active { transform: scale(0.96); opacity: 0.9; }
 
   /* SCAN BUTTON */
-  .scan-btn {
-    position: fixed;
-    bottom: 24px;
-    right: 20px;
-    background: var(--accent);
-    color: #000;
-    border: none;
-    border-radius: 50px;
-    padding: 14px 22px;
-    font-family: var(--mono);
-    font-size: 12px;
-    font-weight: 700;
-    letter-spacing: 1px;
-    cursor: pointer;
-    box-shadow: var(--glow-green), 0 8px 24px rgba(0,0,0,0.4);
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    transition: all 0.2s;
-    z-index: 50;
-  }
+  /* scan-btn FAB supprimé */
 
   .scan-btn:active { transform: scale(0.95); }
 
@@ -1079,6 +1059,12 @@
     <span class="section-title">Signaux d'entrée (≥2 indicateurs)</span>
     <span class="badge badge-green" id="entryBadge">0 détectés</span>
   </div>
+  <!-- Bouton Scanner intégré -->
+  <button id="scanBtn" onclick="runScan()" style="width:100%; background:var(--accent); color:#000; border:none; border-radius:12px; padding:16px; font-family:var(--mono); font-size:13px; font-weight:700; letter-spacing:1px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:10px; margin-bottom:16px; box-shadow:var(--glow-green)">
+    <span id="scanIcon">⚡</span>
+    <span id="scanText">SCANNER</span>
+  </button>
+
   <div id="entrySignals">
     <div class="empty-state"><div class="icon">📡</div>Lancez un scan pour détecter les signaux</div>
   </div>
@@ -1603,10 +1589,7 @@
 
 </div>
 
-<button class="scan-btn" id="scanBtn" onclick="runScan()">
-  <span id="scanIcon">⚡</span>
-  <span id="scanText">SCANNER</span>
-</button>
+<!-- FAB supprimé - bouton scanner intégré dans l'onglet Scanner -->
 
 <div class="toast" id="toast"></div>
 
@@ -2311,14 +2294,6 @@ function switchTab(tab) {
   document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
   document.getElementById('view-' + tab).classList.add('active');
   event.target.classList.add('active');
-
-  // Hide scan FAB on shortlist & guide tabs (it overlaps buttons)
-  const scanBtn = document.getElementById('scanBtn');
-  if (tab === 'shortlist' || tab === 'guide' || tab === 'settings') {
-    scanBtn.style.display = 'none';
-  } else {
-    scanBtn.style.display = 'flex';
-  }
 
   if (tab === 'portfolio') renderPortfolio();
   if (tab === 'watchlist') renderWatchlist();
