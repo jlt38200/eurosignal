@@ -517,7 +517,7 @@
           🔐 Ouvrir la page de login Lynk & Co
         </button>
         <label>URL de redirection (msauth://...)</label>
-        <textarea id="input-redirect" rows="3" placeholder="msauth://prod.lynkco.app.crisp.prod/...?code=XXXXXXXX..."></textarea>
+        <textarea id="input-redirect" rows="3" placeholder="https://www.lynkco.com/en/auth?code=XXXXXXXX..."></textarea>
       </div>
 
       <button class="btn" id="btn-connect" onclick="connect()">
@@ -640,7 +640,7 @@ function placeMarker(lat, lng) {
 
 // ── AUTH ─────────────────────────────────────────────────────────
 function openLoginPage() {
-  const loginUrl = 'https://lynkcoiamb2c.b2clogin.com/lynkcoiamb2c.onmicrosoft.com/oauth2/v2.0/authorize?p=B2C_1A_SignUpOrSignInWithPhone&client_id=c9e37b91-f1e7-4e4d-8700-9c8e12abc123&nonce=defaultNonce&redirect_uri=msauth.com.lynkco.prod.lynkco-app%3A%2F%2Fauth&scope=openid+offline_access&response_type=code&prompt=login';
+  const loginUrl = 'https://login.lynkco.com/lynkcoprod.onmicrosoft.com/B2C_1A_SIGNIN_ONLY/oauth2/v2.0/authorize?client_id=6768eb93-fee7-491e-b3b7-e1b7d5aa30e9&nonce=defaultNonce&redirect_uri=https%3A%2F%2Fwww.lynkco.com%2Fen%2Fauth&scope=openid&response_type=code&prompt=login&ui_locales=fr';
   window.open(loginUrl, '_blank');
 }
 
