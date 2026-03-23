@@ -639,8 +639,41 @@ function placeMarker(lat, lng) {
 }
 
 // ── AUTH ─────────────────────────────────────────────────────────
-function openLoginPage() {
-  const loginUrl = 'https://login.lynkco.com/lynkcoprod.onmicrosoft.com/B2C_1A_SIGNIN_ONLY/oauth2/v2.0/authorize?client_id=6768eb93-fee7-491e-b3b7-e1b7d5aa30e9&nonce=defaultNonce&redirect_uri=https%3A%2F%2Fwww.lynkco.com%2Fen%2Fauth&scope=openid&response_type=code&prompt=login&ui_locales=fr';
+// ── PKCE helpers ─────────────────────────────────────────────────
+function generateCodeVerifier() {
+  const array = new Uint8Array(32);
+  crypto.getRandomValues(array);
+  return btoa(String.fromCharCode(...array))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
+
+async function generateCodeChallenge(verifier) {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(verifier);
+  const digest = await crypto.subtle.digest('SHA-256', data);
+  return btoa(String.fromCharCode(...new Uint8Array(digest)))
+    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
+
+async function openLoginPage() {
+  const verifier = generateCodeVerifier();
+  const challenge = await generateCodeChallenge(verifier);
+  // Stocker le verifier pour l'échange de token
+  sessionStorage.setItem('pkce_verifier', verifier);
+
+  const params = new URLSearchParams({
+    client_id:             '6768eb93-fee7-491e-b3b7-e1b7d5aa30e9',
+    nonce:                 'defaultNonce',
+    redirect_uri:          'https://www.lynkco.com/en/auth',
+    scope:                 'openid',
+    response_type:         'code',
+    prompt:                'login',
+    ui_locales:            'fr',
+    code_challenge:        challenge,
+    code_challenge_method: 'S256',
+  });
+
+  const loginUrl = `https://login.lynkco.com/lynkcoprod.onmicrosoft.com/B2C_1A_SIGNIN_ONLY/oauth2/v2.0/authorize?${params}`;
   window.open(loginUrl, '_blank');
 }
 
@@ -667,7 +700,7 @@ async function connect() {
     const res = await fetch(`${workerUrl}/auth`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ code })
+      body: JSON.stringify({ code, code_verifier: sessionStorage.getItem('pkce_verifier') || '' })
     });
 
     if (!res.ok) throw new Error(`Auth échouée (${res.status})`);
@@ -805,3 +838,5 @@ function showToast(msg, type = '') {
 </script>
 </body>
 </html>
+lynkco-tracker.html
+Affichage de lynkco-tracker.html en cours...
