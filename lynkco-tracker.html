@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Lynk & Co Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+  :root {
+    --bg: #0a0c0f;
+    --surface: #111318;
+    --surface2: #181c23;
+    --border: #1e2530;
+    --accent: #00e5ff;
+    --accent2: #0077ff;
+    --red: #ff3b55;
+    --green: #00ff88;
+    --muted: #4a5568;
+    --text: #e2e8f0;
+    --text2: #718096;
+    --font-mono: 'Space Mono', monospace;
+    --font-body: 'DM Sans', sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── HEADER ── */
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+    z-index: 1000;
+  }
+
+  .logo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .logo-icon {
+    width: 32px;
+    height: 32px;
+    background: linear-gradient(135deg, var(--accent2), var(--accent));
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+  }
+
+  .logo-text {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    color: var(--text);
+  }
+
+  .logo-sub {
+    font-size: 10px;
+    color: var(--text2);
+    font-family: var(--font-mono);
+    letter-spacing: 0.08em;
+  }
+
+  .status-pill {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 5px 12px;
+    font-size: 11px;
+    font-family: var(--font-mono);
+    color: var(--text2);
+    transition: all 0.3s;
+  }
+
+  .status-pill.connected {
+    border-color: var(--green);
+    color: var(--green);
+  }
+
+  .status-pill.error {
+    border-color: var(--red);
+    color: var(--red);
+  }
+
+  .status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--muted);
+    transition: background 0.3s;
+  }
+
+  .status-pill.connected .status-dot {
+    background: var(--green);
+    box-shadow: 0 0 6px var(--green);
+    animation: pulse-dot 2s infinite;
+  }
+
+  .status-pill.error .status-dot { background: var(--red); }
+
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  /* ── MAIN LAYOUT ── */
+  main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* ── MAP ── */
+  #map {
+    flex: 1;
+    z-index: 1;
+  }
+
+  .leaflet-tile-pane { filter: brightness(0.7) saturate(0.6) hue-rotate(180deg); }
+
+  /* ── SETUP PANEL ── */
+  #setup-panel {
+    position: absolute;
+    inset: 0;
+    background: var(--bg);
+    z-index: 500;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    padding: 20px 16px;
+    overflow-y: auto;
+  }
+
+  #setup-panel.hidden { display: none; }
+
+  .setup-card {
+    width: 100%;
+    max-width: 480px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 24px;
+    margin-bottom: 16px;
+  }
+
+  .setup-card h2 {
+    font-family: var(--font-mono);
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: 0.08em;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+  }
+
+  .setup-card p {
+    font-size: 13px;
+    color: var(--text2);
+    line-height: 1.6;
+    margin-bottom: 16px;
+  }
+
+  .step {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 14px;
+    align-items: flex-start;
+  }
+
+  .step-num {
+    width: 24px;
+    height: 24px;
+    min-width: 24px;
+    background: var(--surface2);
+    border: 1px solid var(--accent2);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--accent);
+    margin-top: 1px;
+  }
+
+  .step-text {
+    font-size: 13px;
+    color: var(--text2);
+    line-height: 1.6;
+  }
+
+  .step-text code {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--accent);
+    word-break: break-all;
+  }
+
+  .field-group {
+    margin-bottom: 14px;
+  }
+
+  label {
+    display: block;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text2);
+    letter-spacing: 0.06em;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+  }
+
+  input, textarea {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 12px;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    outline: none;
+    transition: border-color 0.2s;
+    resize: none;
+  }
+
+  input:focus, textarea:focus {
+    border-color: var(--accent2);
+  }
+
+  input::placeholder, textarea::placeholder {
+    color: var(--muted);
+  }
+
+  .btn {
+    width: 100%;
+    background: linear-gradient(135deg, var(--accent2), var(--accent));
+    border: none;
+    border-radius: 10px;
+    padding: 13px;
+    color: #000;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    cursor: pointer;
+    transition: opacity 0.2s, transform 0.1s;
+  }
+
+  .btn:hover { opacity: 0.9; }
+  .btn:active { transform: scale(0.98); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .btn-secondary {
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+
+  .btn-sm {
+    padding: 8px 16px;
+    font-size: 11px;
+    width: auto;
+    border-radius: 8px;
+  }
+
+  .divider {
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 16px 0;
+  }
+
+  /* ── INFO PANEL ── */
+  #info-panel {
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    padding: 12px 16px;
+    flex-shrink: 0;
+    z-index: 100;
+  }
+
+  .info-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+
+  .info-cell {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 10px;
+    text-align: center;
+  }
+
+  .info-cell-label {
+    font-family: var(--font-mono);
+    font-size: 9px;
+    color: var(--text2);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 3px;
+  }
+
+  .info-cell-value {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--accent);
+    font-weight: 700;
+  }
+
+  .info-cell-value.dim { color: var(--text2); font-size: 11px; }
+
+  .action-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .btn-refresh {
+    flex: 1;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    transition: border-color 0.2s;
+  }
+
+  .btn-refresh:hover { border-color: var(--accent2); color: var(--accent); }
+
+  .btn-config {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 14px;
+    color: var(--text2);
+    font-size: 16px;
+    cursor: pointer;
+    transition: border-color 0.2s;
+  }
+
+  .btn-config:hover { border-color: var(--accent2); color: var(--accent); }
+
+  .auto-badge {
+    background: var(--surface2);
+    border: 1px solid var(--green);
+    color: var(--green);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    border-radius: 4px;
+    padding: 2px 6px;
+  }
+
+  /* ── TOAST ── */
+  #toast {
+    position: fixed;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 18px;
+    font-size: 12px;
+    font-family: var(--font-mono);
+    color: var(--text);
+    opacity: 0;
+    transition: opacity 0.3s, transform 0.3s;
+    z-index: 9999;
+    white-space: nowrap;
+  }
+
+  #toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+
+  #toast.success { border-color: var(--green); color: var(--green); }
+  #toast.error { border-color: var(--red); color: var(--red); }
+
+  /* ── SPINNER ── */
+  .spinner {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── MAP MARKER ── */
+  .car-marker {
+    width: 36px;
+    height: 36px;
+    background: linear-gradient(135deg, var(--accent2), var(--accent));
+    border-radius: 50% 50% 50% 0;
+    transform: rotate(-45deg);
+    border: 2px solid #fff;
+    box-shadow: 0 4px 16px rgba(0, 119, 255, 0.5);
+  }
+
+  .car-marker-inner {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transform: rotate(45deg);
+    font-size: 16px;
+  }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <div class="logo">
+    <div class="logo-icon">🚗</div>
+    <div>
+      <div class="logo-text">LYNK & CO</div>
+      <div class="logo-sub">01 · TRACKER</div>
+    </div>
+  </div>
+  <div class="status-pill" id="status-pill">
+    <div class="status-dot"></div>
+    <span id="status-text">HORS LIGNE</span>
+  </div>
+</header>
+
+<main>
+
+  <!-- SETUP PANEL -->
+  <div id="setup-panel">
+    <div class="setup-card">
+      <h2>⚙️ Configuration</h2>
+      <p>Renseigne tes informations Lynk & Co pour commencer le suivi en temps réel.</p>
+
+      <div class="field-group">
+        <label>🔗 URL du proxy Cloudflare Worker</label>
+        <input type="url" id="input-worker" placeholder="https://lynkco-proxy.TON_COMPTE.workers.dev" />
+      </div>
+
+      <div class="field-group">
+        <label>🚗 Numéro VIN</label>
+        <input type="text" id="input-vin" placeholder="L6TCX2E7XNE014798" maxlength="17" style="text-transform:uppercase" />
+      </div>
+
+      <hr class="divider">
+      <h2>🔑 Authentification</h2>
+
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-text">
+          Clique sur le bouton ci-dessous pour ouvrir la page de login Lynk & Co dans ton navigateur.
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-text">
+          Connecte-toi avec ton email et mot de passe Lynk & Co. Après login, le navigateur tente d'ouvrir une URL commençant par <code>msauth.com.lynkco...</code>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-text">
+          Copie cette URL depuis la barre d'adresse et colle-la ci-dessous.
+        </div>
+      </div>
+
+      <div class="field-group" style="margin-top:8px">
+        <button class="btn btn-secondary btn-sm" onclick="openLoginPage()" style="margin-bottom:12px">
+          🔐 Ouvrir la page de login Lynk & Co
+        </button>
+        <label>URL de redirection (msauth://...)</label>
+        <textarea id="input-redirect" rows="3" placeholder="msauth.com.lynkco.prod.lynkco-app://auth?code=XXXXXXXX..."></textarea>
+      </div>
+
+      <button class="btn" id="btn-connect" onclick="connect()">
+        Connecter & Localiser
+      </button>
+    </div>
+
+    <div class="setup-card" style="opacity:0.6">
+      <h2>☁️ Cloudflare Worker requis</h2>
+      <p>Le Worker est un proxy gratuit qui contourne les restrictions CORS. Déploie le fichier <strong>worker.js</strong> fourni avec cette PWA sur <a href="https://workers.cloudflare.com" target="_blank" style="color:var(--accent)">workers.cloudflare.com</a> (compte gratuit suffisant).</p>
+    </div>
+  </div>
+
+  <!-- MAP -->
+  <div id="map"></div>
+
+  <!-- INFO PANEL -->
+  <div id="info-panel" style="display:none">
+    <div class="info-grid">
+      <div class="info-cell">
+        <div class="info-cell-label">Latitude</div>
+        <div class="info-cell-value" id="val-lat">—</div>
+      </div>
+      <div class="info-cell">
+        <div class="info-cell-label">Longitude</div>
+        <div class="info-cell-value" id="val-lng">—</div>
+      </div>
+      <div class="info-cell">
+        <div class="info-cell-label">Mise à jour</div>
+        <div class="info-cell-value dim" id="val-time">—</div>
+      </div>
+    </div>
+    <div class="action-row">
+      <button class="btn-refresh" id="btn-refresh" onclick="fetchPosition()">
+        <span id="refresh-icon">↻</span>
+        <span id="refresh-label">Actualiser</span>
+      </button>
+      <span class="auto-badge" id="auto-badge">AUTO 30s</span>
+      <button class="btn-config" onclick="showSetup()" title="Reconfigurer">⚙</button>
+    </div>
+  </div>
+
+</main>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
+<script>
+// ── CONFIG ──────────────────────────────────────────────────────
+const STORAGE_KEY = 'lynkco_config';
+let config = { workerUrl: '', vin: '', accessToken: '', refreshToken: '' };
+let map = null;
+let marker = null;
+let autoInterval = null;
+const AUTO_REFRESH_SEC = 30;
+
+// ── INIT ─────────────────────────────────────────────────────────
+window.addEventListener('load', () => {
+  initMap();
+  loadConfig();
+});
+
+function loadConfig() {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      config = { ...config, ...JSON.parse(saved) };
+      document.getElementById('input-worker').value = config.workerUrl || '';
+      document.getElementById('input-vin').value = config.vin || '';
+      if (config.accessToken && config.vin && config.workerUrl) {
+        hideSetup();
+        fetchPosition();
+        startAutoRefresh();
+      }
+    }
+  } catch(e) {}
+}
+
+function saveConfig() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+}
+
+// ── MAP ──────────────────────────────────────────────────────────
+function initMap() {
+  map = L.map('map', {
+    center: [45.7485, 4.8467], // Lyon par défaut
+    zoom: 13,
+    zoomControl: true,
+    attributionControl: false
+  });
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '© OpenStreetMap'
+  }).addTo(map);
+
+  L.control.attribution({ position: 'bottomright', prefix: false })
+    .addAttribution('© OpenStreetMap')
+    .addTo(map);
+}
+
+function placeMarker(lat, lng) {
+  const icon = L.divIcon({
+    className: '',
+    html: `<div class="car-marker"><div class="car-marker-inner">🚗</div></div>`,
+    iconSize: [36, 36],
+    iconAnchor: [18, 36],
+    popupAnchor: [0, -36]
+  });
+
+  if (marker) {
+    marker.setLatLng([lat, lng]);
+  } else {
+    marker = L.marker([lat, lng], { icon }).addTo(map);
+    marker.bindPopup('<b>Lynk & Co 01</b><br>Ta voiture');
+  }
+
+  map.flyTo([lat, lng], 15, { duration: 1.5, easeLinearity: 0.3 });
+}
+
+// ── AUTH ─────────────────────────────────────────────────────────
+function openLoginPage() {
+  const loginUrl = 'https://loginmycar.lynkco.com/prod-eu/';
+  window.open(loginUrl, '_blank');
+}
+
+async function connect() {
+  const workerUrl = document.getElementById('input-worker').value.trim();
+  const vin = document.getElementById('input-vin').value.trim().toUpperCase();
+  const redirectUrl = document.getElementById('input-redirect').value.trim();
+
+  if (!workerUrl) { showToast('⚠️ URL du Worker manquante', 'error'); return; }
+  if (!vin || vin.length !== 17) { showToast('⚠️ VIN invalide (17 caractères requis)', 'error'); return; }
+  if (!redirectUrl || !redirectUrl.includes('code=')) { showToast('⚠️ URL de redirection invalide', 'error'); return; }
+
+  const code = new URLSearchParams(redirectUrl.split('?')[1]).get('code');
+  if (!code) { showToast('⚠️ Code introuvable dans l\'URL', 'error'); return; }
+
+  config.workerUrl = workerUrl;
+  config.vin = vin;
+
+  const btn = document.getElementById('btn-connect');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Connexion...';
+
+  try {
+    const res = await fetch(`${workerUrl}/auth`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code })
+    });
+
+    if (!res.ok) throw new Error(`Auth échouée (${res.status})`);
+
+    const data = await res.json();
+    config.accessToken = data.access_token;
+    config.refreshToken = data.refresh_token;
+    saveConfig();
+
+    showToast('✅ Connecté !', 'success');
+    hideSetup();
+    fetchPosition();
+    startAutoRefresh();
+  } catch(e) {
+    showToast(`❌ ${e.message}`, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = 'Connecter & Localiser';
+  }
+}
+
+// ── POSITION ─────────────────────────────────────────────────────
+async function fetchPosition() {
+  if (!config.accessToken || !config.vin || !config.workerUrl) return;
+
+  setRefreshing(true);
+  setStatus('loading');
+
+  try {
+    const res = await fetch(`${config.workerUrl}/position`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        vin: config.vin,
+        access_token: config.accessToken,
+        refresh_token: config.refreshToken
+      })
+    });
+
+    if (res.status === 401) {
+      // Token expiré — réauth nécessaire
+      config.accessToken = '';
+      saveConfig();
+      showSetup();
+      showToast('🔑 Session expirée — reconnecte-toi', 'error');
+      return;
+    }
+
+    if (!res.ok) throw new Error(`Erreur API (${res.status})`);
+
+    const data = await res.json();
+
+    // Si le Worker renvoie un nouveau token
+    if (data.new_access_token) {
+      config.accessToken = data.new_access_token;
+      saveConfig();
+    }
+
+    const lat = data.latitude || data.lat;
+    const lng = data.longitude || data.lng || data.lon;
+
+    if (!lat || !lng) throw new Error('Position invalide dans la réponse');
+
+    placeMarker(parseFloat(lat), parseFloat(lng));
+
+    document.getElementById('val-lat').textContent = parseFloat(lat).toFixed(5);
+    document.getElementById('val-lng').textContent = parseFloat(lng).toFixed(5);
+    document.getElementById('val-time').textContent = new Date().toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+
+    setStatus('connected');
+    showToast('📍 Position mise à jour', 'success');
+
+  } catch(e) {
+    setStatus('error');
+    showToast(`❌ ${e.message}`, 'error');
+  } finally {
+    setRefreshing(false);
+  }
+}
+
+// ── AUTO REFRESH ──────────────────────────────────────────────────
+function startAutoRefresh() {
+  clearInterval(autoInterval);
+  autoInterval = setInterval(fetchPosition, AUTO_REFRESH_SEC * 1000);
+  document.getElementById('auto-badge').textContent = `AUTO ${AUTO_REFRESH_SEC}s`;
+}
+
+// ── UI HELPERS ────────────────────────────────────────────────────
+function hideSetup() {
+  document.getElementById('setup-panel').classList.add('hidden');
+  document.getElementById('info-panel').style.display = 'block';
+  setTimeout(() => map && map.invalidateSize(), 100);
+}
+
+function showSetup() {
+  document.getElementById('setup-panel').classList.remove('hidden');
+  document.getElementById('info-panel').style.display = 'none';
+  clearInterval(autoInterval);
+  setStatus('offline');
+}
+
+function setStatus(state) {
+  const pill = document.getElementById('status-pill');
+  const text = document.getElementById('status-text');
+  pill.className = 'status-pill';
+  if (state === 'connected') { pill.classList.add('connected'); text.textContent = 'EN LIGNE'; }
+  else if (state === 'error') { pill.classList.add('error'); text.textContent = 'ERREUR'; }
+  else if (state === 'loading') { text.textContent = 'SYNC...'; }
+  else { text.textContent = 'HORS LIGNE'; }
+}
+
+function setRefreshing(loading) {
+  const icon = document.getElementById('refresh-icon');
+  const label = document.getElementById('refresh-label');
+  const btn = document.getElementById('btn-refresh');
+  if (loading) {
+    icon.innerHTML = '<span class="spinner"></span>';
+    label.textContent = 'Actualisation...';
+    btn.disabled = true;
+  } else {
+    icon.textContent = '↻';
+    label.textContent = 'Actualiser';
+    btn.disabled = false;
+  }
+}
+
+let toastTimer;
+function showToast(msg, type = '') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = 'show ' + type;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.className = '', 3000);
+}
+</script>
+</body>
+</html>
